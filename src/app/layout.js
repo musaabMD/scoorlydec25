@@ -1,5 +1,6 @@
 import './globals.css'
 import { ClerkProvider } from '@clerk/nextjs'
+import AnalyticsProvider from '@/components/AnalyticsProvider'
 
 export const metadata = {
   title: 'Scoorly - PDF Question Extractor',
@@ -16,7 +17,10 @@ export default function RootLayout({ children }) {
   return (
     <ClerkProvider>
       <html lang="en">
-        <body>{children}</body>
+        <body>
+          <AnalyticsProvider />
+          {children}
+        </body>
       </html>
     </ClerkProvider>
   )
