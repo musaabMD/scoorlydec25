@@ -2,10 +2,11 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { SignedIn, SignedOut } from '@clerk/nextjs'
+import { SignedIn, SignedOut, useUser, SignInButton } from '@clerk/nextjs'
 import { supabase } from '@/lib/supabase'
-import { FileText, Trash2, BookOpen, MessageSquare, FileQuestion, Layers, Users, StickyNote, Flag, TrendingDown, ClipboardCheck, FileCheck, Sparkles, BarChart3, RotateCcw, CheckCircle2, XCircle } from 'lucide-react'
+import { FileText, Trash2, BookOpen, MessageSquare, FileQuestion, Layers, Users, StickyNote, Flag, TrendingDown, ClipboardCheck, FileCheck, Sparkles, BarChart3, RotateCcw, CheckCircle2, XCircle, X } from 'lucide-react'
 import Header from '@/components/Header'
+import { Button } from '@/components/ui/button'
 
 export default function Home() {
   const [isDragging, setIsDragging] = useState(false)
@@ -13,6 +14,9 @@ export default function Home() {
   const [progress, setProgress] = useState(0)
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [loadingFiles, setLoadingFiles] = useState(true)
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+  const [pendingFile, setPendingFile] = useState(null)
+  const { isSignedIn } = useUser()
   const router = useRouter()
 
   const handleDragOver = useCallback((e) => {
@@ -34,16 +38,26 @@ export default function Home() {
 
     const file = e.dataTransfer.files[0]
     if (file && file.type === 'application/pdf') {
+      if (!isSignedIn) {
+        setPendingFile(file)
+        setShowLoginPrompt(true)
+        return
+      }
       await uploadFile(file)
     }
-  }, [])
+  }, [isSignedIn])
 
   const handleFileInput = useCallback(async (e) => {
     const file = e.target.files[0]
     if (file && file.type === 'application/pdf') {
+      if (!isSignedIn) {
+        setPendingFile(file)
+        setShowLoginPrompt(true)
+        return
+      }
       await uploadFile(file)
     }
-  }, [])
+  }, [isSignedIn])
 
   // Fetch uploaded files from Supabase storage
   const fetchUploadedFiles = useCallback(async () => {
@@ -111,32 +125,7 @@ export default function Home() {
     }
   }, [])
 
-  useEffect(() => {
-    fetchUploadedFiles()
-  }, [fetchUploadedFiles])
-
-  const deleteFile = async (fileName) => {
-    if (!confirm(`Are you sure you want to delete ${fileName}?`)) {
-      return
-    }
-
-    try {
-      const { error } = await supabase.storage
-        .from('uploads')
-        .remove([fileName])
-
-      if (error) {
-        throw error
-      }
-
-      fetchUploadedFiles()
-    } catch (error) {
-      console.error('Error deleting file:', error)
-      alert('Error deleting file: ' + error.message)
-    }
-  }
-
-  const uploadFile = async (file) => {
+  const uploadFile = useCallback(async (file) => {
     setUploading(true)
     setProgress(0)
 
@@ -188,7 +177,46 @@ export default function Home() {
       setUploading(false)
       setProgress(0)
     }
+  }, [router, fetchUploadedFiles])
+
+  useEffect(() => {
+    fetchUploadedFiles()
+  }, [fetchUploadedFiles])
+
+  // Handle pending file after user signs in
+  useEffect(() => {
+    if (isSignedIn && pendingFile && showLoginPrompt) {
+      const file = pendingFile
+      setShowLoginPrompt(false)
+      setPendingFile(null)
+      // Small delay to ensure modal closes before upload starts
+      setTimeout(() => {
+        uploadFile(file).catch(console.error)
+      }, 100)
+    }
+  }, [isSignedIn, pendingFile, showLoginPrompt, uploadFile])
+
+  const deleteFile = async (fileName) => {
+    if (!confirm(`Are you sure you want to delete ${fileName}?`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase.storage
+        .from('uploads')
+        .remove([fileName])
+
+      if (error) {
+        throw error
+      }
+
+      fetchUploadedFiles()
+    } catch (error) {
+      console.error('Error deleting file:', error)
+      alert('Error deleting file: ' + error.message)
+    }
   }
+
 
   const features = [
     { icon: BookOpen, title: 'Features Library', description: 'Comprehensive library like Amboss with thousands of exam resources' },
@@ -208,6 +236,39 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-white">
       <Header />
+
+      {/* Login Prompt Modal */}
+      {showLoginPrompt && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative">
+            <button
+              onClick={() => {
+                setShowLoginPrompt(false)
+                setPendingFile(null)
+              }}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="text-center">
+              <div className="mx-auto h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <FileText className="h-8 w-8 text-blue-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Sign in to upload files
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Please sign in or create an account to upload and process your PDF files.
+              </p>
+              <SignInButton mode="modal">
+                <Button size="lg" className="w-full">
+                  Sign In or Sign Up
+                </Button>
+              </SignInButton>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Hero Section */}
       <section className="max-w-7xl mx-auto px-4 py-16">
