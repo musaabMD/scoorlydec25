@@ -284,11 +284,11 @@ export default function Home() {
       {/* Hero Section */}
       <section className="max-w-7xl mx-auto px-4 py-16">
         <div className="text-center mb-12">
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-8 flex items-center justify-center gap-4 flex-wrap">
+          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 flex items-center justify-center gap-4 flex-wrap">
             <span>Prep for</span>
             <span 
               key={currentExam}
-              className="inline-block px-4 py-2 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white rounded-lg font-bold text-4xl md:text-5xl shadow-lg transform transition-all duration-500 ease-in-out"
+              className="inline-block px-5 py-2.5 bg-gradient-to-r from-blue-100 via-purple-100 to-pink-100 text-gray-800 rounded-xl font-bold text-4xl md:text-5xl border-2 border-blue-200/50 shadow-sm transform transition-all duration-500 ease-in-out"
               style={{
                 animation: 'fadeIn 0.5s ease-in-out'
               }}
@@ -296,6 +296,9 @@ export default function Home() {
               {exams[currentExam]}
             </span>
           </h1>
+          <p className="text-xl md:text-2xl text-gray-600 max-w-2xl mx-auto">
+            Expert-Written Exam Prep, All in One Place. Real questions, top-scoring notes, AI grading. Everything you need to crush your exams.
+          </p>
         </div>
 
         {/* Upload Area */}
@@ -369,7 +372,9 @@ export default function Home() {
               return (
                 <div key={index} className="flex flex-col">
                   <div className="space-y-2 text-center mb-6">
-                    <h3 className="text-xl font-semibold text-gray-900">{feature.title}</h3>
+                    <h3 className="text-xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                      {feature.title}
+                    </h3>
                     <p className="text-base text-gray-600">{feature.description}</p>
                   </div>
                   <div className="w-full h-64 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-auto">
