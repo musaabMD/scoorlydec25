@@ -34,34 +34,6 @@ export default function Home() {
     setIsDragging(false)
   }, [])
 
-  const handleDrop = useCallback(async (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
-
-    const file = e.dataTransfer.files[0]
-    if (file && file.type === 'application/pdf') {
-      if (!isSignedIn) {
-        setPendingFile(file)
-        setShowLoginPrompt(true)
-        return
-      }
-      await uploadFile(file)
-    }
-  }, [isSignedIn, uploadFile])
-
-  const handleFileInput = useCallback(async (e) => {
-    const file = e.target.files[0]
-    if (file && file.type === 'application/pdf') {
-      if (!isSignedIn) {
-        setPendingFile(file)
-        setShowLoginPrompt(true)
-        return
-      }
-      await uploadFile(file)
-    }
-  }, [isSignedIn, uploadFile])
-
   // Fetch uploaded files from Supabase storage
   const fetchUploadedFiles = useCallback(async () => {
     try {
@@ -181,6 +153,34 @@ export default function Home() {
       setProgress(0)
     }
   }, [router, fetchUploadedFiles])
+
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const file = e.dataTransfer.files[0]
+    if (file && file.type === 'application/pdf') {
+      if (!isSignedIn) {
+        setPendingFile(file)
+        setShowLoginPrompt(true)
+        return
+      }
+      await uploadFile(file)
+    }
+  }, [isSignedIn, uploadFile])
+
+  const handleFileInput = useCallback(async (e) => {
+    const file = e.target.files[0]
+    if (file && file.type === 'application/pdf') {
+      if (!isSignedIn) {
+        setPendingFile(file)
+        setShowLoginPrompt(true)
+        return
+      }
+      await uploadFile(file)
+    }
+  }, [isSignedIn, uploadFile])
 
   useEffect(() => {
     fetchUploadedFiles()
