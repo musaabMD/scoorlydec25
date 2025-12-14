@@ -16,8 +16,11 @@ export default function Home() {
   const [loadingFiles, setLoadingFiles] = useState(true)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
   const [pendingFile, setPendingFile] = useState(null)
+  const [currentExam, setCurrentExam] = useState(0)
   const { isSignedIn } = useUser()
   const router = useRouter()
+
+  const exams = ['USMLE', 'SMLE', 'CCNA']
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault()
@@ -45,7 +48,7 @@ export default function Home() {
       }
       await uploadFile(file)
     }
-  }, [isSignedIn])
+  }, [isSignedIn, uploadFile])
 
   const handleFileInput = useCallback(async (e) => {
     const file = e.target.files[0]
@@ -57,7 +60,7 @@ export default function Home() {
       }
       await uploadFile(file)
     }
-  }, [isSignedIn])
+  }, [isSignedIn, uploadFile])
 
   // Fetch uploaded files from Supabase storage
   const fetchUploadedFiles = useCallback(async () => {
@@ -183,6 +186,14 @@ export default function Home() {
     fetchUploadedFiles()
   }, [fetchUploadedFiles])
 
+  // Rotate exam names
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentExam((prev) => (prev + 1) % exams.length)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [exams.length])
+
   // Handle pending file after user signs in
   useEffect(() => {
     if (isSignedIn && pendingFile && showLoginPrompt) {
@@ -273,12 +284,18 @@ export default function Home() {
       {/* Hero Section */}
       <section className="max-w-7xl mx-auto px-4 py-16">
         <div className="text-center mb-12">
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-            Drop File and Prep for Your Exam
+          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-8 flex items-center justify-center gap-4 flex-wrap">
+            <span>Prep for</span>
+            <span 
+              key={currentExam}
+              className="inline-block px-4 py-2 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white rounded-lg font-bold text-4xl md:text-5xl shadow-lg transform transition-all duration-500 ease-in-out"
+              style={{
+                animation: 'fadeIn 0.5s ease-in-out'
+              }}
+            >
+              {exams[currentExam]}
+            </span>
           </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Transform your PDFs into interactive study materials with AI-powered question extraction, flashcards, and comprehensive exam preparation tools.
-          </p>
         </div>
 
         {/* Upload Area */}
