@@ -234,7 +234,7 @@ function DashboardContent() {
               </div>
               <CardTitle className="text-2xl">No files uploaded yet</CardTitle>
               <CardDescription className="text-base">
-                Get started by uploading your first PDF file. We'll extract questions and help you prepare for your exams.
+                Get started by uploading your first PDF file. We&apos;ll extract questions and help you prepare for your exams.
               </CardDescription>
             </CardHeader>
             <CardFooter className="flex justify-center">

@@ -150,7 +150,7 @@ export default function ExamsPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Browse Exams</h1>
-          <p className="text-gray-600">Find and save exams you're preparing for</p>
+          <p className="text-gray-600">Find and save exams you&apos;re preparing for</p>
         </div>
 
         {/* My Exams (Pinned) */}

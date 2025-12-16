@@ -838,7 +838,7 @@ function DetailsPageContent() {
                           ) : (
                             <div>
                               <p className="mb-2">No questions found on this page</p>
-                              <p className="text-xs text-gray-400">Try clicking "Start Extraction" to analyze the PDF</p>
+                              <p className="text-xs text-gray-400">Try clicking &quot;Start Extraction&quot; to analyze the PDF</p>
                             </div>
                           )}
                         </div>
