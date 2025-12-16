@@ -14,13 +14,25 @@ export async function GET() {
 
     const data = await response.json()
     
-    // Filter for vision-capable models (that support image input)
+    // Filter for vision-capable models only (models that support image input)
+    const visionModelIds = [
+      'openai/gpt-4o',
+      'openai/gpt-4o-mini',
+      'openai/gpt-4-turbo',
+      'openai/gpt-4-vision-preview',
+      'anthropic/claude-3.5-sonnet',
+      'anthropic/claude-3-5-sonnet-20241022',
+      'anthropic/claude-3-opus',
+      'anthropic/claude-3-sonnet',
+      'anthropic/claude-3-haiku',
+      'google/gemini-pro-vision',
+      'google/gemini-1.5-pro',
+      'google/gemini-1.5-flash',
+      'google/gemini-2.0-flash-exp',
+    ]
+    
     const visionModels = (data.data || []).filter(model => 
-      model.id && 
-      (model.id.includes('gpt-4') || 
-       model.id.includes('claude') || 
-       model.id.includes('gemini') ||
-       model.context_length > 0)
+      model.id && visionModelIds.some(vid => model.id.includes(vid.split('/')[1]))
     ).map(model => ({
       id: model.id,
       name: model.name || model.id,

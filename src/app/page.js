@@ -2,9 +2,12 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { SignedIn, SignedOut, useUser, SignInButton } from '@clerk/nextjs'
+import { useUser, SignUpButton } from '@clerk/nextjs'
 import { supabase } from '@/lib/supabase'
-import { FileText, Trash2, BookOpen, MessageSquare, FileQuestion, Layers, Users, StickyNote, Flag, TrendingDown, ClipboardCheck, FileCheck, Sparkles, BarChart3, RotateCcw, CheckCircle2, XCircle, X } from 'lucide-react'
+import { 
+  Brain, FileQuestion, Layers, Target, MessageSquare, RotateCcw, 
+  X, FileText, Upload, ArrowRight, Sparkles
+} from 'lucide-react'
 import Header from '@/components/Header'
 import { Button } from '@/components/ui/button'
 
@@ -12,15 +15,14 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [uploadedFiles, setUploadedFiles] = useState([])
-  const [loadingFiles, setLoadingFiles] = useState(true)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
   const [pendingFile, setPendingFile] = useState(null)
   const [currentExam, setCurrentExam] = useState(0)
-  const { isSignedIn } = useUser()
+  const [mounted, setMounted] = useState(false)
+  const { isSignedIn, isLoaded } = useUser()
   const router = useRouter()
 
-  const exams = ['USMLE', 'SMLE', 'CCNA']
+  const exams = ['USMLE', 'SMLE', 'CCNA', 'MCAT', 'NCLEX']
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault()
@@ -32,72 +34,6 @@ export default function Home() {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
-  }, [])
-
-  // Fetch uploaded files from Supabase storage
-  const fetchUploadedFiles = useCallback(async () => {
-    try {
-      setLoadingFiles(true)
-      const { data, error } = await supabase.storage
-        .from('uploads')
-        .list('', {
-          limit: 100,
-          offset: 0,
-        })
-
-      if (error) {
-        console.error('Error fetching files:', error)
-        setUploadedFiles([])
-        return
-      }
-
-      if (!data || data.length === 0) {
-        setUploadedFiles([])
-        return
-      }
-
-      const pdfFiles = data.filter(file => file.name.toLowerCase().endsWith('.pdf'))
-      const sortedData = [...pdfFiles].sort((a, b) => {
-        const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : 0)
-        const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : 0)
-        return timeB - timeA
-      })
-
-      const filesWithUrls = await Promise.all(
-        sortedData.map(async (file) => {
-          const { data: urlData } = supabase.storage
-            .from('uploads')
-            .getPublicUrl(file.name)
-          
-          let displayName = file.name
-          try {
-            const parts = file.name.split('_')
-            const ext = file.name.split('.').pop()
-            if (parts.length >= 3) {
-              const nameParts = parts.slice(0, -2)
-              if (nameParts.length > 0) {
-                displayName = nameParts.join('_') + '.' + ext
-              }
-            }
-          } catch (e) {
-            displayName = file.name
-          }
-          
-          return {
-            ...file,
-            publicUrl: urlData.publicUrl,
-            displayName: displayName
-          }
-        })
-      )
-
-      setUploadedFiles(filesWithUrls)
-    } catch (error) {
-      console.error('Error fetching files:', error)
-      setUploadedFiles([])
-    } finally {
-      setLoadingFiles(false)
-    }
   }, [])
 
   const uploadFile = useCallback(async (file) => {
@@ -136,15 +72,12 @@ export default function Home() {
       clearInterval(progressInterval)
       setProgress(100)
 
-      if (error) {
-        throw error
-      }
+      if (error) throw error
 
       const { data: urlData } = supabase.storage
         .from('uploads')
         .getPublicUrl(filePath)
 
-      fetchUploadedFiles()
       router.push(`/details?file=${encodeURIComponent(filePath)}&url=${encodeURIComponent(urlData.publicUrl)}`)
     } catch (error) {
       console.error('Error uploading file:', error)
@@ -152,7 +85,7 @@ export default function Home() {
       setUploading(false)
       setProgress(0)
     }
-  }, [router, fetchUploadedFiles])
+  }, [router])
 
   const handleDrop = useCallback(async (e) => {
     e.preventDefault()
@@ -183,131 +116,126 @@ export default function Home() {
   }, [isSignedIn, uploadFile])
 
   useEffect(() => {
-    fetchUploadedFiles()
-  }, [fetchUploadedFiles])
+    setMounted(true)
+  }, [])
 
-  // Rotate exam names
   useEffect(() => {
+    if (isLoaded && isSignedIn && mounted) {
+      router.push('/dashboard')
+    }
+  }, [isLoaded, isSignedIn, mounted, router])
+
+  useEffect(() => {
+    if (!mounted) return
     const interval = setInterval(() => {
       setCurrentExam((prev) => (prev + 1) % exams.length)
-    }, 3000)
+    }, 2500)
     return () => clearInterval(interval)
-  }, [exams.length])
+  }, [mounted, exams.length])
 
-  // Handle pending file after user signs in
   useEffect(() => {
     if (isSignedIn && pendingFile && showLoginPrompt) {
       const file = pendingFile
       setShowLoginPrompt(false)
       setPendingFile(null)
-      // Small delay to ensure modal closes before upload starts
       setTimeout(() => {
         uploadFile(file).catch(console.error)
       }, 100)
     }
   }, [isSignedIn, pendingFile, showLoginPrompt, uploadFile])
 
-  const deleteFile = async (fileName) => {
-    if (!confirm(`Are you sure you want to delete ${fileName}?`)) {
-      return
-    }
-
-    try {
-      const { error } = await supabase.storage
-        .from('uploads')
-        .remove([fileName])
-
-      if (error) {
-        throw error
-      }
-
-      fetchUploadedFiles()
-    } catch (error) {
-      console.error('Error deleting file:', error)
-      alert('Error deleting file: ' + error.message)
-    }
-  }
-
-
   const features = [
-    { icon: BookOpen, title: 'Features Library', description: 'Comprehensive library like Amboss with thousands of exam resources' },
-    { icon: MessageSquare, title: 'Chat', description: 'Interactive chat for questions and explanations' },
-    { icon: FileQuestion, title: 'MCQ Generated', description: 'Automatically generate multiple choice questions from your PDFs' },
-    { icon: Layers, title: 'Flashcards Anki-like', description: 'Create and study with Anki-style flashcards' },
-    { icon: Users, title: 'Community', description: 'Connect with other students and share resources' },
-    { icon: StickyNote, title: 'HY Notes', description: 'High-yield notes for quick review' },
-    { icon: Flag, title: 'Flag', description: 'Flag important questions and topics' },
-    { icon: TrendingDown, title: 'Weak Subject', description: 'Identify and focus on your weak subjects' },
-    { icon: ClipboardCheck, title: 'Exam Them', description: 'Practice with exam-style questions' },
-    { icon: FileCheck, title: 'Explanation Summary', description: 'Get detailed explanations and summaries' },
-    { icon: RotateCcw, title: 'Review Mode', description: 'Review flagged, correct, and incorrect answers' },
-    { icon: Sparkles, title: 'Thousands of Pages', description: 'Access thousands of pages for specific exams' },
+    { 
+      icon: Brain, 
+      title: 'AI Question Extraction', 
+      description: 'Upload any PDF and our AI instantly extracts MCQs, identifies correct answers, and creates study materials.'
+    },
+    { 
+      icon: FileQuestion, 
+      title: 'Smart MCQ Practice', 
+      description: 'Practice with auto-generated multiple choice questions. Get instant feedback and explanations.'
+    },
+    { 
+      icon: Layers, 
+      title: 'Anki-Style Flashcards', 
+      description: 'Convert your notes into spaced repetition flashcards. Master concepts with proven techniques.'
+    },
+    { 
+      icon: Target, 
+      title: 'Weakness Analysis', 
+      description: 'AI identifies your weak areas and creates personalized study plans to improve.'
+    },
+    { 
+      icon: MessageSquare, 
+      title: 'AI Study Assistant', 
+      description: 'Chat with AI about any topic. Get explanations and deepen your understanding.'
+    },
+    { 
+      icon: RotateCcw, 
+      title: 'Spaced Review', 
+      description: 'Review flagged questions and difficult topics with intelligent scheduling.'
+    },
   ]
 
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-background">
       <Header />
 
       {/* Login Prompt Modal */}
       {showLoginPrompt && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative">
+          <div className="bg-background rounded-lg shadow-lg max-w-md w-full p-6 relative border">
             <button
               onClick={() => {
                 setShowLoginPrompt(false)
                 setPendingFile(null)
               }}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
             >
               <X className="h-5 w-5" />
             </button>
             <div className="text-center">
-              <div className="mx-auto h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                <FileText className="h-8 w-8 text-blue-600" />
+              <div className="mx-auto h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                <FileText className="h-6 w-6 text-primary" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Sign in to upload files
+              <h2 className="text-xl font-semibold mb-2">
+                Create your free account
               </h2>
-              <p className="text-gray-600 mb-6">
-                Please sign in or create an account to upload and process your PDF files.
+              <p className="text-muted-foreground mb-6 text-sm">
+                Sign up to upload PDFs and extract questions with AI.
               </p>
-              <SignInButton mode="modal">
-                <Button size="lg" className="w-full">
-                  Sign In or Sign Up
+              <SignUpButton mode="modal" forceRedirectUrl="/dashboard">
+                <Button className="w-full" onClick={() => setShowLoginPrompt(false)}>
+                  Get Started
                 </Button>
-              </SignInButton>
+              </SignUpButton>
             </div>
           </div>
         </div>
       )}
 
       {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-4 py-16">
+      <section className="max-w-5xl mx-auto px-4 pt-20 pb-16">
         <div className="text-center mb-12">
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 flex items-center justify-center gap-4 flex-wrap">
-            <span>Prep for</span>
-            <span 
-              key={currentExam}
-              className="inline-block px-5 py-2.5 bg-gradient-to-r from-blue-100 via-purple-100 to-pink-100 text-gray-800 rounded-xl font-bold text-4xl md:text-5xl border-2 border-blue-200/50 shadow-sm transform transition-all duration-500 ease-in-out"
-              style={{
-                animation: 'fadeIn 0.5s ease-in-out'
-              }}
-            >
-              {exams[currentExam]}
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
+            Ace Your{' '}
+            <span className="inline-block px-3 py-1 bg-primary text-primary-foreground rounded-lg">
+              {mounted ? exams[currentExam] : exams[0]}
             </span>
+            {' '}Exam
           </h1>
-          <p className="text-xl md:text-2xl text-gray-600 max-w-2xl mx-auto">
-            Expert-Written Exam Prep, All in One Place. Real questions, top-scoring notes, AI grading. Everything you need to crush your exams.
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            Upload any study material and let AI extract MCQs, create flashcards, and build personalized practice tests.
           </p>
         </div>
 
         {/* Upload Area */}
-        <div className="max-w-2xl mx-auto mb-16">
+        <div className="max-w-2xl mx-auto">
           <div
-            className={`border-2 border-dashed rounded-xl p-12 text-center transition-all ${
+            className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
               isDragging
-                ? 'border-blue-500 bg-blue-50 scale-105'
-                : 'border-gray-300 bg-gray-50 hover:border-blue-400'
+                ? 'border-primary bg-primary/5'
+                : 'border-muted-foreground/25 hover:border-primary/50'
             } ${uploading ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -325,122 +253,97 @@ export default function Home() {
             
             {uploading ? (
               <div className="space-y-4">
-                <div className="w-full bg-gray-200 rounded-full h-4">
+                <div className="w-full max-w-xs mx-auto bg-muted rounded-full h-2">
                   <div
-                    className="bg-blue-600 h-4 rounded-full transition-all duration-300"
+                    className="bg-primary h-2 rounded-full transition-all"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <p className="text-gray-600 font-medium">Uploading... {Math.round(progress)}%</p>
+                <p className="text-muted-foreground">Uploading... {Math.round(progress)}%</p>
               </div>
             ) : (
               <>
-                <div className="mx-auto h-20 w-20 text-blue-600 mb-6">
-                  <svg
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                    className="w-full h-full"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-                <p className="text-2xl font-semibold text-gray-800 mb-2">
-                  Drop your PDF file here
+                <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-lg font-medium mb-2">
+                  Drop your PDF here
                 </p>
-                <p className="text-gray-500 mb-4">
-                  or click to browse • Supports all PDF formats
+                <p className="text-sm text-muted-foreground">
+                  or click to browse
                 </p>
               </>
             )}
           </div>
         </div>
+      </section>
 
-        {/* Features Section */}
-        <div className="mb-16">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
+      {/* Features Section */}
+      <section className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-12">
             Powerful Features for Exam Success
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => {
               const Icon = feature.icon
               return (
                 <div key={index} className="flex flex-col">
-                  <div className="space-y-2 text-center mb-6">
-                    <h3 className="text-xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  <div className="text-center mb-4">
+                    <h3 className="text-xl font-semibold mb-2">
                       {feature.title}
                     </h3>
-                    <p className="text-base text-gray-600">{feature.description}</p>
+                    <p className="text-muted-foreground text-sm">
+                      {feature.description}
+                    </p>
                   </div>
-                  <div className="w-full h-64 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-auto">
-                    <p className="text-sm text-gray-400">Image placeholder</p>
+                  <div className="w-full h-48 bg-muted rounded-lg flex items-center justify-center mt-auto">
+                    <Icon className="h-10 w-10 text-muted-foreground/50" />
                   </div>
                 </div>
               )
             })}
           </div>
         </div>
-
-        {/* Uploaded Files Section */}
-        <SignedIn>
-          <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 max-w-4xl mx-auto">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">Your Uploaded Files</h2>
-            {loadingFiles ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                <p className="text-gray-500">Loading files...</p>
-              </div>
-            ) : uploadedFiles.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                <p>No files uploaded yet</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {uploadedFiles.map((file) => (
-                  <div
-                    key={file.name}
-                    className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors group"
-                  >
-                    <div
-                      className="flex items-center gap-3 flex-1 cursor-pointer"
-                      onClick={() => {
-                        router.push(`/details?file=${encodeURIComponent(file.name)}&url=${encodeURIComponent(file.publicUrl)}`)
-                      }}
-                    >
-                      <FileText className="h-5 w-5 text-blue-600 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate" title={file.displayName || file.name}>
-                          {file.displayName || file.name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {file.metadata?.size ? `${(file.metadata.size / 1024).toFixed(1)} KB` : 'Unknown size'}
-                          {file.created_at && ` • ${new Date(file.created_at).toLocaleDateString()}`}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteFile(file.name)
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-2 text-red-600 hover:bg-red-50 rounded transition-all"
-                      title="Delete file"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </SignedIn>
       </section>
+
+      {/* CTA Section */}
+      <section className="py-20">
+        <div className="max-w-2xl mx-auto px-4 text-center">
+          <h2 className="text-3xl font-bold mb-4">
+            Ready to Ace Your Exam?
+          </h2>
+          <p className="text-muted-foreground mb-8">
+            Start your free trial today.
+          </p>
+          {!isSignedIn && (
+            <SignUpButton mode="modal" forceRedirectUrl="/dashboard">
+              <Button size="lg">
+                Get Started
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </SignUpButton>
+          )}
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t py-8">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              <span className="font-semibold">Scoorly</span>
+            </div>
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+              <a href="/pricing" className="hover:text-foreground">Pricing</a>
+              <a href="mailto:support@scoorly.com" className="hover:text-foreground">Contact</a>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              © {new Date().getFullYear()} Scoorly
+            </p>
+          </div>
+        </div>
+      </footer>
     </main>
   )
 }

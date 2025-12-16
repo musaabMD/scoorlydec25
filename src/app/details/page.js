@@ -45,6 +45,10 @@ function DetailsPageContent() {
   const [extracting, setExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionStatus, setExtractionStatus] = useState('')
+  const [elapsedTime, setElapsedTime] = useState(0)
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState(null)
+  const extractionStartTimeRef = useRef(null)
+  const timerIntervalRef = useRef(null)
   const [pdfScale, setPdfScale] = useState(1.0) // Display scale
   const [renderScale, setRenderScale] = useState(2.0) // High quality render scale (2x for crisp text)
   const [pageWidth, setPageWidth] = useState(null)
@@ -66,16 +70,14 @@ function DetailsPageContent() {
       if (!pdfjs.GlobalWorkerOptions.workerSrc) {
         pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`
       }
-      
-      // Verify worker is ready
-      try {
-        // Test worker initialization
-        const testDoc = pdfjs.getDocument({ data: new Uint8Array(0), verbosity: 0 })
-        testDoc.promise.catch(() => {
-          // Worker error is expected for empty data, but confirms worker is initialized
-        })
-      } catch (e) {
-        console.warn('PDF.js worker initialization check:', e)
+    }
+  }, [])
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current)
       }
     }
   }, [])
@@ -230,6 +232,16 @@ function DetailsPageContent() {
     setExtracting(true)
     setExtractionProgress(0)
     setExtractionStatus('Starting extraction...')
+    setElapsedTime(0)
+    setEstimatedTimeRemaining(null)
+    extractionStartTimeRef.current = Date.now()
+    
+    // Start timer interval for elapsed time
+    timerIntervalRef.current = setInterval(() => {
+      if (extractionStartTimeRef.current) {
+        setElapsedTime(Math.floor((Date.now() - extractionStartTimeRef.current) / 1000))
+      }
+    }, 100)
 
     try {
       // Fetch PDF as blob
@@ -337,10 +349,20 @@ function DetailsPageContent() {
             
             extractedQuestions[pageNumber] = questions
             
-            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-            setExtractionProgress((completedCount / totalPages) * 100)
+            const elapsed = (Date.now() - startTime) / 1000
+            const progress = completedCount / totalPages
+            setExtractionProgress(progress * 100)
+            
+            // Calculate ETA based on current speed
+            if (completedCount > 0) {
+              const avgTimePerPage = elapsed / completedCount
+              const remainingPages = totalPages - completedCount
+              const eta = Math.ceil(avgTimePerPage * remainingPages)
+              setEstimatedTimeRemaining(eta)
+            }
+            
             setExtractionStatus(
-              `Page ${pageNumber}/${totalPages} complete (${questions.length} questions) - ${completedCount}/${totalPages} done in ${elapsed}s`
+              `Page ${pageNumber}: ${questions.length} questions found`
             )
             
             return result
@@ -361,15 +383,33 @@ function DetailsPageContent() {
         `✅ Extraction complete! Found ${totalQuestions} questions across ${totalPages} pages in ${totalTime}s`
       )
       console.log(`Extraction completed in ${totalTime}s - ${totalQuestions} questions found`)
+      
+      // Save questions to localStorage for dashboard display
+      if (filePath && typeof window !== 'undefined') {
+        try {
+          const storageKey = `questions_${filePath}`
+          localStorage.setItem(storageKey, JSON.stringify(extractedQuestions))
+        } catch (e) {
+          console.error('Error saving questions to localStorage:', e)
+        }
+      }
     } catch (error) {
       console.error('Error processing PDF:', error)
       setExtractionStatus('Error during extraction')
     } finally {
+      // Clear timer
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current)
+        timerIntervalRef.current = null
+      }
       setExtracting(false)
+      setEstimatedTimeRemaining(null)
+      // Keep progress and status visible for 3 seconds after completion
       setTimeout(() => {
         setExtractionProgress(0)
         setExtractionStatus('')
-      }, 2000)
+        setElapsedTime(0)
+      }, 3000)
     }
   }
 
@@ -531,28 +571,59 @@ function DetailsPageContent() {
       </header>
 
       <div className="flex-1 flex flex-col overflow-hidden w-full">
-        {extracting && (
-          <div className="mx-4 mt-4 mb-4 bg-white rounded-lg shadow p-4 flex-shrink-0">
-            <div className="flex items-center justify-between mb-2">
+        {(extracting || extractionProgress > 0) && (
+          <div className="mx-4 mt-4 mb-4 bg-white rounded-lg shadow p-4 flex-shrink-0 border border-gray-100">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex-1">
-                <span className="text-sm font-medium text-gray-700 block">Extracting questions (AI + OCR in parallel)...</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-gray-800">
+                    {extracting ? 'Extracting Questions...' : '✅ Extraction Complete!'}
+                  </span>
+                  {extracting && (
+                    <span className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
+                      Processing
+                    </span>
+                  )}
+                </div>
                 {extractionStatus && (
                   <span className="text-xs text-gray-500 mt-1 block">{extractionStatus}</span>
                 )}
               </div>
-              <span className="text-sm text-gray-600 ml-4">{Math.round(extractionProgress)}%</span>
+              <div className="text-right ml-4">
+                <span className="text-lg font-bold text-blue-600">{Math.round(extractionProgress)}%</span>
+              </div>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            
+            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-3">
               <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                className="bg-gradient-to-r from-blue-500 to-purple-600 h-2.5 rounded-full transition-all duration-300"
                 style={{ width: `${extractionProgress}%` }}
               />
             </div>
-            <div className="mt-2 flex gap-4 text-xs text-gray-600">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-                Parallel AI Vision Extraction (All pages processing simultaneously)
-              </span>
+            
+            <div className="flex items-center justify-between text-xs text-gray-600">
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Elapsed: <span className="font-semibold text-gray-800">{elapsedTime}s</span>
+                </span>
+                {estimatedTimeRemaining !== null && extracting && (
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    ETA: <span className="font-semibold text-gray-800">~{estimatedTimeRemaining}s</span>
+                  </span>
+                )}
+              </div>
+              {numPages && (
+                <span className="text-gray-500">
+                  {Math.round(extractionProgress / 100 * numPages)}/{numPages} pages
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -611,15 +682,7 @@ function DetailsPageContent() {
             {/* Questions - Right Side */}
             <Panel defaultSize={50} minSize={30} className="flex flex-col">
               <div className="bg-white flex flex-col h-full">
-                {extracting ? (
-                  <div className="text-center py-8 flex-1 flex items-center justify-center">
-                    <div>
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                      <p className="text-gray-600">Extracting questions from PDF...</p>
-                      <p className="text-sm text-gray-500 mt-2">{Math.round(extractionProgress)}% complete</p>
-                    </div>
-                  </div>
-                ) : loading ? (
+                {loading ? (
                   <div className="text-center py-8 flex-1 flex items-center justify-center">
                     <p className="text-gray-600">Loading PDF...</p>
                   </div>
@@ -767,7 +830,17 @@ function DetailsPageContent() {
                         })
                       ) : (
                         <div className="text-center py-8 text-gray-500">
-                          {extracting ? 'Processing...' : 'No questions found on this page'}
+                          {extracting ? (
+                            <div>
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                              <p>Extracting questions from page {pageNumber}...</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="mb-2">No questions found on this page</p>
+                              <p className="text-xs text-gray-400">Try clicking "Start Extraction" to analyze the PDF</p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
