@@ -148,7 +148,7 @@ export default function ExamsPage() {
       
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold mb-2">Browse Exams</h1>
           <p className="text-gray-600">Find and save exams you&apos;re preparing for</p>
         </div>
@@ -192,8 +192,8 @@ export default function ExamsPage() {
         )}
 
         {/* Search */}
-        <div className="mb-6">
-          <div className="relative max-w-md">
+        <div className="mb-6 flex justify-center">
+          <div className="relative w-full max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
@@ -206,7 +206,7 @@ export default function ExamsPage() {
         </div>
 
         {/* Category Tabs */}
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="mb-6 flex flex-wrap gap-2 justify-center">
           {categories.map(cat => (
             <button
               key={cat}
@@ -223,7 +223,7 @@ export default function ExamsPage() {
         </div>
 
         {/* Results count */}
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 mb-4 text-center">
           {filteredExams.length} exam{filteredExams.length !== 1 ? 's' : ''} found
         </p>
 

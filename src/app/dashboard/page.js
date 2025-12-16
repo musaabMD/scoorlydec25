@@ -29,8 +29,92 @@ function DashboardContent() {
   const [questionCounts, setQuestionCounts] = useState({})
   const [pageCounts, setPageCounts] = useState({})
   const [mounted, setMounted] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
   const { isSignedIn, isLoaded } = useUser()
   const router = useRouter()
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }, [])
+
+  const uploadFile = useCallback(async (file) => {
+    setUploading(true)
+    setProgress(0)
+
+    try {
+      const fileExt = file.name.split('.').pop()
+      const originalFileName = file.name.replace(/\.[^/.]+$/, '')
+      const cleanName = originalFileName
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .substring(0, 50)
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '')
+      const randomId = Math.random().toString(36).substring(2, 8)
+      const timestamp = Date.now()
+      const fileName = cleanName ? `${cleanName}_${randomId}_${timestamp}.${fileExt}` : `${randomId}_${timestamp}.${fileExt}`
+      const filePath = fileName
+
+      const uploadPromise = supabase.storage
+        .from('uploads')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: 'application/pdf'
+        })
+
+      const progressInterval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 90) return prev
+          return prev + 10
+        })
+      }, 200)
+
+      const { error } = await uploadPromise
+      clearInterval(progressInterval)
+      setProgress(100)
+
+      if (error) throw error
+
+      const { data: urlData } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(filePath)
+
+      router.push(`/details?file=${encodeURIComponent(filePath)}&url=${encodeURIComponent(urlData.publicUrl)}`)
+    } catch (error) {
+      console.error('Error uploading file:', error)
+      alert('Error uploading file: ' + (error.message || 'Unknown error'))
+      setUploading(false)
+      setProgress(0)
+    }
+  }, [router])
+
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const file = e.dataTransfer.files[0]
+    if (file && file.type === 'application/pdf') {
+      await uploadFile(file)
+    }
+  }, [uploadFile])
+
+  const handleFileInput = useCallback(async (e) => {
+    const file = e.target.files[0]
+    if (file && file.type === 'application/pdf') {
+      await uploadFile(file)
+    }
+  }, [uploadFile])
 
   // Track client-side mount to prevent hydration mismatches
   useEffect(() => {
@@ -227,23 +311,51 @@ function DashboardContent() {
             </CardContent>
           </Card>
         ) : uploadedFiles.length === 0 ? (
-          <Card className="max-w-2xl mx-auto">
-            <CardHeader className="text-center">
-              <div className="mx-auto h-20 w-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mb-4">
-                <Upload className="h-10 w-10 text-blue-600" />
-              </div>
-              <CardTitle className="text-2xl">No files uploaded yet</CardTitle>
-              <CardDescription className="text-base">
-                Get started by uploading your first PDF file. We&apos;ll extract questions and help you prepare for your exams.
-              </CardDescription>
-            </CardHeader>
-            <CardFooter className="flex justify-center">
-              <Button size="lg" onClick={() => router.push('/')} className="gap-2">
-                <Upload className="h-5 w-5" />
-                Upload PDF
-              </Button>
-            </CardFooter>
-          </Card>
+          <div className="max-w-2xl mx-auto">
+            <div
+              className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
+                isDragging
+                  ? 'border-black bg-gray-50'
+                  : 'border-gray-300 hover:border-gray-400'
+              } ${uploading ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => !uploading && document.getElementById('dashboard-file-input')?.click()}
+            >
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={handleFileInput}
+                className="hidden"
+                id="dashboard-file-input"
+                disabled={uploading}
+              />
+              
+              {uploading ? (
+                <div className="space-y-4">
+                  <div className="w-full max-w-xs mx-auto bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-black h-2 rounded-full transition-all"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <p className="text-gray-600">Uploading... {Math.round(progress)}%</p>
+                </div>
+              ) : (
+                <>
+                  <Upload className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                  <h3 className="text-xl font-semibold mb-2">No files uploaded yet</h3>
+                  <p className="text-gray-500 mb-4">
+                    Drop your PDF here or click to browse
+                  </p>
+                  <p className="text-sm text-gray-400">
+                    We&apos;ll extract questions and help you prepare for your exams
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {uploadedFiles.map((file) => (
